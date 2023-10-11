@@ -1,1 +1,1 @@
-# SoftTissueTumorSegmentaiton
+# SoftTissueTumorSegmentation

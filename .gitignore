@@ -1,0 +1,8 @@
+/artifacts
+/data
+/mlruns
+/notebooks
+/runs
+.idea
+__pycache__
+
