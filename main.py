@@ -1,6 +1,5 @@
 import shutil
 from torch.utils.data import DataLoader
-# from model.model_zoo import load_model
 import numpy as np
 import torch
 import os
@@ -9,8 +8,6 @@ from ParamConfigurator import ParamConfigurator
 from tqdm import tqdm
 import mlflow
 from torch.utils.tensorboard import SummaryWriter
-# from monai.losses import DiceLoss
-# import random
 import uuid
 from utils import set_seed, save_conda_env, load_model, DiceCELoss, DiceSimilarityCoefficient
 
@@ -21,24 +18,9 @@ def main(config: ParamConfigurator, writer: torch.utils.tensorboard.SummaryWrite
     run_dir = f"{config.artifact_dir}{run_uuid}"
     os.makedirs(run_dir, exist_ok=True)
 
-    # hyperparameters and conda env
     mlflow.log_params(config.__dict__)
     save_conda_env(config)
 
-    # hparams = {}
-    # hparams["f_maps"] = config.f_maps
-    # hparams["levels"] = config.levels
-    # hparams["residual_block"] = config.residual_block
-    # hparams["se_block"] = config.se_block
-    # hparams["attention"] = config.attention
-    # hparams["MHTSA_heads"] = config.MHTSA_heads
-    # hparams["MHGSA_heads"] = config.MHGSA_heads
-    # hparams["trilinear"] = config.trilinear
-    # hparams["MSSC"] = config.MSSC  # TODO: How to include None dtypes?
-
-
-    # model = load_model(config.model_name, hparams)
-    # model = model.to(config.device)
     model = load_model(config=config)
 
     train_data = SarcomaDataset(config=config, mode="train")
@@ -46,9 +28,6 @@ def main(config: ParamConfigurator, writer: torch.utils.tensorboard.SummaryWrite
                                   pin_memory=config.pin_memory, num_workers=config.num_workers)
 
     optimizer = torch.optim.Adam(model.parameters(), lr=config.learning_rate)
-    # loss_CE = torch.nn.CrossEntropyLoss(ignore_index=config.ignore_index)
-    # loss_Dice = DiceLoss(include_background=config.include_background, to_onehot_y=True, sigmoid=True,
-    #                      squared_pred=True)
     loss_fn = DiceCELoss(config=config)
     dice_score = DiceSimilarityCoefficient(config=config)
 
@@ -90,22 +69,12 @@ def main(config: ParamConfigurator, writer: torch.utils.tensorboard.SummaryWrite
                     writer.add_image(tag=true_tag, img_tensor=seg_arr,
                                      global_step=epoch, dataformats="WH")
 
-                    # ce_outputs = outputs
-                    # ce_segmentations = segmentations[:, 0, :, :, :].to(torch.long)
-                    # loss_ce = loss_CE(ce_outputs, ce_segmentations)
-                    # loss_dice = loss_Dice(outputs, segmentations)
-                    # loss = loss_ce + loss_dice
                     loss = loss_fn(outputs, segmentations)
                     loss.backward()
                     optimizer.step()
 
                     running_train_loss.append(loss.item())
 
-
-                    # numerator = torch.sum(outputs.argmax(dim=1).squeeze() * segmentations.squeeze()).item()
-                    # denominator = torch.sum(outputs.argmax(dim=1).squeeze()).item() + torch.sum(segmentations.squeeze()).item()
-                    # dice_score = (2*numerator) / denominator
-                    # running_train_dice.append(dice_score)
                     score = dice_score(outputs, segmentations)
                     running_train_dice.append(score)
 
@@ -139,7 +108,6 @@ def main(config: ParamConfigurator, writer: torch.utils.tensorboard.SummaryWrite
                 try:
                     outputs = model(volumes)
 
-                    # save predicted mask as image using tensorboard
                     middle_slice_idx = int(outputs.shape[-1] / 2)
                     output_arr = outputs.squeeze().argmax(dim=0)[:, :, middle_slice_idx].numpy(force=True)
                     seg_arr = segmentations.squeeze()[:, :, middle_slice_idx].numpy(force=True)
@@ -152,19 +120,8 @@ def main(config: ParamConfigurator, writer: torch.utils.tensorboard.SummaryWrite
                     writer.add_image(tag=true_tag, img_tensor=seg_arr,
                                      global_step=epoch, dataformats="WH")
 
-                    # loss
-                    # ce_outputs = outputs
-                    # ce_segmentations = segmentations[:, 0, :, :, :].to(torch.long)
-                    # loss_ce = loss_CE(ce_outputs, ce_segmentations)
-                    # loss_dice = loss_Dice(outputs, segmentations)
-                    # loss = loss_ce + loss_dice
-
                     loss = loss_fn(outputs, segmentations)
                     running_val_loss.append(loss.item())
-
-                    # numerator = torch.sum(outputs.argmax(dim=1).squeeze() * segmentations.squeeze()).item()
-                    # denominator = torch.sum(outputs.argmax(dim=1).squeeze()).item() + torch.sum(segmentations.squeeze()).item()
-                    # dice_score = (2*numerator) / denominator
 
                     score = dice_score(outputs, segmentations)
                     running_val_dice.append(score)
@@ -193,22 +150,14 @@ def main(config: ParamConfigurator, writer: torch.utils.tensorboard.SummaryWrite
             model_path = f"{run_dir}/last_epoch_model.pth"
             torch.save(model.state_dict(), model_path)
 
-    # save model binaries
     mlflow.log_artifacts(run_dir)
 
     ############################
     # Test on external dataset #
     ############################
 
-    # model = load_model(config.model_name, hparams)
-    # model = model.to(config.device)
     model = load_model(config=config)
     model.load_state_dict(torch.load(f"{run_dir}/best_dice_model.pth"))
-
-
-    # loss_CE = torch.nn.CrossEntropyLoss(ignore_index=config.ignore_index)
-    # loss_Dice = DiceLoss(include_background=config.include_background, to_onehot_y=True, sigmoid=True,
-    #                      squared_pred=True)
 
     test_data = SarcomaDataset(config=config, mode="test")
     test_dataloader = DataLoader(test_data, batch_size=config.batch_size, shuffle=False,
@@ -226,7 +175,6 @@ def main(config: ParamConfigurator, writer: torch.utils.tensorboard.SummaryWrite
             try:
                 outputs = model(volumes)
 
-                # save predicted mask as image using tensorboard
                 middle_slice_idx = int(outputs.shape[-1] / 2)
                 output_arr = outputs.squeeze().argmax(dim=0)[:, :, middle_slice_idx].numpy(force=True)
                 seg_arr = segmentations.squeeze()[:, :, middle_slice_idx].numpy(force=True)
@@ -237,18 +185,8 @@ def main(config: ParamConfigurator, writer: torch.utils.tensorboard.SummaryWrite
                 true_tag = patient_id[0] + "_true_val"
                 writer.add_image(tag=true_tag, img_tensor=seg_arr, dataformats="WH")
 
-                # loss
-                # ce_outputs = outputs
-                # ce_segmentations = segmentations[:, 0, :, :, :].to(torch.long)
-                # loss_ce = loss_CE(ce_outputs, ce_segmentations)
-                # loss_dice = loss_Dice(outputs, segmentations)
-                # loss = loss_ce + loss_dice
                 loss = loss_fn(outputs, segmentations)
                 running_test_loss.append(loss.item())
-
-                # numerator = torch.sum(outputs.argmax(dim=1).squeeze() * segmentations.squeeze()).item()
-                # denominator = torch.sum(outputs.argmax(dim=1).squeeze()).item() + torch.sum(segmentations.squeeze()).item()
-                # dice_score = (2*numerator) / denominator
 
                 score = dice_score(outputs, segmentations)
                 running_test_dice.append(score)
