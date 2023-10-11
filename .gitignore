@@ -1,5 +1,5 @@
 /artifacts
-/data
+/data/*
 /mlruns
 /notebooks
 /runs
