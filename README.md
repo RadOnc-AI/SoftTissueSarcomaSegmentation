@@ -1,5 +1,7 @@
 # SoftTissueTumorSegmentation
 
+This repository contains all code to automatically segment 3D MRI scans containing sarcomas located in patients extremities using a 3D Residual UNet (3DResUNet) architecture. 
+
 ## Preliminaries
 
 1. Setup and activate conda environment
